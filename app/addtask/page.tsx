@@ -1,15 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-// import footer ถ้าจำเป็น แต่หน้านี้มักจะเป็นหน้าเดี่ยวๆ อาจจะไม่ต้องใส่ Footer ก็ได้ครับ
 
-export default function Page() {
-  // =============================================
-  // State Management
-  // =============================================
+export default function AddTaskPage() {
+  // ===============================
+  // State
+  // ===============================
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -17,37 +16,35 @@ export default function Page() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // =============================================
-  // Image Selection
-  // =============================================
-  const handleSelectImage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert("ไฟล์รูปภาพต้องมีขนาดไม่เกิน 5MB");
-        return;
-      }
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+  // ===============================
+  // Image Select
+  // ===============================
+  const handleSelectImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("ไฟล์รูปต้องไม่เกิน 5MB");
+      return;
     }
+
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
   };
 
-  // =============================================
-  // Remove Image
-  // =============================================
   const handleRemoveImage = () => {
     setImageFile(null);
     setImagePreview("");
   };
 
-  // =============================================
-  // Form Submit
-  // =============================================
-  const handleUploadAndSave = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  // ===============================
+  // Submit Form
+  // ===============================
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
 
-    if (title.trim() === "" || detail.trim() === "") {
-      alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+    if (!title.trim() || !detail.trim()) {
+      alert("กรุณากรอกข้อมูลให้ครบ");
       return;
     }
 
@@ -56,25 +53,24 @@ export default function Page() {
     try {
       let imageUrl = "";
 
+      // 1. Upload Image
       if (imageFile) {
-        const newFileName = `${Date.now()}_${imageFile.name}`;
-        const { error } = await supabase.storage
-          .from("task_bk")
-          .upload(newFileName, imageFile);
+        const fileName = `${Date.now()}_${imageFile.name}`;
 
-        if (error) {
-          alert("เกิดข้อผิดพลาดในการอัปโหลดรูป");
-          setIsSubmitting(false);
-          return;
-        }
+        const { error: uploadError } = await supabase.storage
+          .from("task_bk")
+          .upload(fileName, imageFile);
+
+        if (uploadError) throw uploadError;
 
         const { data } = supabase.storage
           .from("task_bk")
-          .getPublicUrl(newFileName);
+          .getPublicUrl(fileName);
 
         imageUrl = data.publicUrl;
       }
 
+      // 2. Insert Task
       const { error } = await supabase.from("task_tb").insert({
         title: title.trim(),
         detail: detail.trim(),
@@ -82,169 +78,165 @@ export default function Page() {
         is_completed: isCompleted,
       });
 
-      if (error) {
-        alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
-        setIsSubmitting(false);
-        return;
+      if (error) throw error;
+
+      // 3. ส่ง LINE Notification
+      try {
+        const lineResponse = await fetch("/api/line", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: title.trim(),
+            detail: detail.trim(),
+            imageUrl: imageUrl,
+            isCompleted: isCompleted,
+          }),
+        });
+
+        if (!lineResponse.ok) {
+          console.error("LINE notification failed");
+        }
+      } catch (lineErr) {
+        console.error("LINE API Error:", lineErr);
+        // ไม่ให้ LINE error ทำให้การสร้าง task ล้มเหลว
       }
 
-      // alert("✅ บันทึกงานใหม่เรียบร้อยแล้ว"); // ตัดออกก็ได้เพื่อให้ UX ลื่นไหล
-      window.location.href = "/alltask";
-    } catch (error) {
-      console.error("Error:", error);
-      alert("เกิดข้อผิดพลาดที่ไม่คาดคิด");
+      // 4. Success → ไปหน้า list
+      window.location.replace("/alltask");
+
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดในการบันทึก");
+    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5FA] font-sans pb-10">
+    <div className="min-h-screen bg-[#F5F5FA] pb-10">
       
-      {/* =============================================
-          1. Mobile Header (Back Button & Title)
-          ============================================= */}
-      <div className="px-6 pt-8 pb-4 flex items-center gap-4 bg-white/80 backdrop-blur-md sticky top-0 z-20">
-        <Link 
+      {/* Header */}
+      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur px-6 py-4 flex items-center gap-4">
+        <Link
           href="/alltask"
-          className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+          className="w-10 h-10 rounded-full border flex items-center justify-center"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+          ←
         </Link>
-        <h1 className="text-xl font-bold text-slate-800">New Task</h1>
+        <h1 className="text-xl font-bold">New Task</h1>
       </div>
 
-      <div className="max-w-xl mx-auto px-6 mt-4">
-        
-        {/* =============================================
-            2. Form Card
-            ============================================= */}
-        <div className="bg-white rounded-[2rem] shadow-sm p-6 md:p-8">
-          <form onSubmit={handleUploadAndSave} className="space-y-6">
-            
-            {/* Title Input */}
-            <div>
-              <label className="block text-slate-500 font-semibold mb-2 text-sm ml-2">
-                Task Title
-              </label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                type="text"
-                className="w-full bg-[#F5F5FA] border-none rounded-2xl p-4 text-slate-800 font-medium placeholder-slate-400 focus:ring-2 focus:ring-[#4B4CED] transition-all"
-                placeholder="What needs to be done?"
-                required
-              />
-            </div>
+      {/* Form */}
+      <div className="max-w-xl mx-auto px-6 mt-6">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white rounded-[2rem] p-6 space-y-6 shadow-sm"
+        >
+          {/* Title */}
+          <div>
+            <label className="block mb-2 text-sm font-semibold text-slate-500">
+              Task Title
+            </label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full p-4 rounded-2xl bg-[#F5F5FA]"
+              placeholder="What needs to be done?"
+              required
+            />
+          </div>
 
-            {/* Detail Textarea */}
-            <div>
-              <label className="block text-slate-500 font-semibold mb-2 text-sm ml-2">
-                Description
-              </label>
-              <textarea
-                value={detail}
-                onChange={(e) => setDetail(e.target.value)}
-                className="w-full bg-[#F5F5FA] border-none rounded-2xl p-4 text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-[#4B4CED] transition-all resize-none h-32"
-                placeholder="Add some details..."
-                required
-              />
-            </div>
+          {/* Detail */}
+          <div>
+            <label className="block mb-2 text-sm font-semibold text-slate-500">
+              Description
+            </label>
+            <textarea
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+              className="w-full p-4 rounded-2xl bg-[#F5F5FA] h-32 resize-none"
+              placeholder="Add details..."
+              required
+            />
+          </div>
 
-            {/* Image Upload Area */}
-            <div>
-              <label className="block text-slate-500 font-semibold mb-2 text-sm ml-2">
-                Attachment
-              </label>
-              
-              {!imagePreview ? (
-                <div>
-                  <input
-                    id="fileInput"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleSelectImage}
-                  />
-                  <label
-                    htmlFor="fileInput"
-                    className="flex flex-col items-center justify-center gap-2 bg-[#F5F5FA] hover:bg-slate-100 
-                               border-2 border-dashed border-slate-300 hover:border-[#4B4CED]
-                               text-slate-500 py-8 rounded-2xl cursor-pointer 
-                               transition-all duration-300 w-full group"
-                  >
-                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-2xl group-hover:scale-110 transition-transform">
-                      📷
-                    </div>
-                    <span className="text-sm font-medium">Tap to upload image</span>
-                  </label>
-                </div>
-              ) : (
-                <div className="relative rounded-2xl overflow-hidden border border-slate-100 shadow-sm">
-                  <Image
-                    src={imagePreview}
-                    alt="preview"
-                    width={400}
-                    height={300}
-                    className="w-full h-48 object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleRemoveImage}
-                    className="absolute top-3 right-3 bg-white/90 backdrop-blur text-red-500 rounded-full w-8 h-8 flex items-center justify-center shadow-md hover:bg-red-50 transition-colors"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-            </div>
+          {/* Image */}
+          <div>
+            <label className="block mb-2 text-sm font-semibold text-slate-500">
+              Attachment
+            </label>
 
-            {/* Status Select (Pill Style) */}
-            <div>
-              <label className="block text-slate-500 font-semibold mb-2 text-sm ml-2">
-                Status
-              </label>
-              <div className="relative">
-                <select
-                  value={isCompleted ? "1" : "0"}
-                  onChange={(e) => setIsCompleted(e.target.value === "1")}
-                  className="w-full bg-[#F5F5FA] border-none rounded-2xl p-4 appearance-none text-slate-800 font-medium focus:ring-2 focus:ring-[#4B4CED] transition-all"
+            {!imagePreview ? (
+              <>
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="file"
+                  className="hidden"
+                  onChange={handleSelectImage}
+                />
+                <label
+                  htmlFor="file"
+                  className="block text-center p-8 border-2 border-dashed rounded-2xl cursor-pointer bg-[#F5F5FA]"
                 >
-                  <option value="0">⏳ In Progress</option>
-                  <option value="1">✅ Completed</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-400">
-                  <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-                </div>
+                  📷 Upload image
+                </label>
+              </>
+            ) : (
+              <div className="relative">
+                <Image
+                  src={imagePreview}
+                  alt="preview"
+                  width={400}
+                  height={300}
+                  className="rounded-2xl object-cover h-48 w-full"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute top-2 right-2 bg-white rounded-full px-3 py-1"
+                >
+                  ✕
+                </button>
               </div>
-            </div>
+            )}
+          </div>
 
-            {/* Action Buttons */}
-            <div className="pt-4 flex gap-3">
-              <Link
-                href="/alltask"
-                className="flex-1 py-4 rounded-2xl font-bold text-center text-slate-500 bg-transparent border border-slate-200 hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </Link>
+          {/* Status */}
+          <div>
+            <label className="block mb-2 text-sm font-semibold text-slate-500">
+              Status
+            </label>
+            <select
+              value={isCompleted ? "1" : "0"}
+              onChange={(e) => setIsCompleted(e.target.value === "1")}
+              className="w-full p-4 rounded-2xl bg-[#F5F5FA]"
+            >
+              <option value="0">⏳ In Progress</option>
+              <option value="1">✅ Completed</option>
+            </select>
+          </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-[2] py-4 rounded-2xl font-bold text-white bg-[#4B4CED] hover:bg-[#3f40d6] shadow-lg shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    Saving...
-                  </>
-                ) : (
-                  "Create Task"
-                )}
-              </button>
-            </div>
+          {/* Actions */}
+          <div className="flex gap-3 pt-4">
+            <Link
+              href="/alltask"
+              className="flex-1 text-center py-4 rounded-2xl border"
+            >
+              Cancel
+            </Link>
 
-          </form>
-        </div>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex-[2] py-4 rounded-2xl bg-indigo-600 text-white font-bold disabled:opacity-50"
+            >
+              {isSubmitting ? "Saving..." : "Create Task"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
