@@ -125,7 +125,7 @@ export default function AddTaskPage() {
         >
           ←
         </Link>
-        <h1 className="text-xl font-bold">New Task</h1>
+        <h1 className="text-xl font-bold">New Ticket to Moojeefilm</h1>
       </div>
 
       {/* Form */}
@@ -204,7 +204,7 @@ export default function AddTaskPage() {
             )}
           </div>
 
-          {/* Status */}
+          {/* Status
           <div>
             <label className="block mb-2 text-sm font-semibold text-slate-500">
               Status
@@ -217,7 +217,7 @@ export default function AddTaskPage() {
               <option value="0">⏳ In Progress</option>
               <option value="1">✅ Completed</option>
             </select>
-          </div>
+          </div> */}
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">

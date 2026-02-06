@@ -119,16 +119,7 @@ export default function Page() {
             <h1 className="text-xl font-bold text-slate-800">Moojee!</h1>
           </div>
         </div>
-        <div className="flex gap-3">
-          {/* Fake Icons */}
-          <button className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm">
-            ⚙️
-          </button>
-          <button className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm relative">
-            🔔
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
-          </button>
-        </div>
+  
       </div>
 
       <div className="max-w-3xl mx-auto px-6">
